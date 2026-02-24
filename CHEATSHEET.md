@@ -189,4 +189,183 @@ curl http://localhost:5000
 
 ---
 
+---
+
+## Week 2: Networking & Web App Deployment
+
+### Networking Concepts
+
+| Concept | Description |
+|---------|-------------|
+| Socket | IP address + Port combination (e.g. `127.0.0.1:5000`) |
+| `127.0.0.1` | Loopback address — local machine only |
+| `0.0.0.0` | Bind to all available network interfaces |
+| `[::]` | IPv6 equivalent of `0.0.0.0` |
+| Port 80 | Default HTTP port — browsers assume this if none specified |
+| Port 443 | Default HTTPS port |
+| Port 22 | SSH — remote server access |
+| DNS | Resolves human-readable names to IP addresses |
+| Reverse Proxy | Sits in front of app server, forwards requests transparently |
+| Load Balancing | Distributing traffic across multiple servers behind one domain |
+
+**DNS Resolution Order:**
+1. `/etc/hosts` file (local override — checked first)
+2. Local DNS cache
+3. External DNS server (router → ISP → root servers)
+
+**Binding address decision:**
+- `127.0.0.1` — development, local process only
+- `0.0.0.0` — production / WSL2 (accept from all interfaces)
+
+### Network Diagnostic Tools
+
+| Command | Purpose | Example |
+|---------|---------|---------|
+| `ss -tlnp` | List listening TCP ports with process names | `ss -tlnp` |
+| `ss -a \| grep <port>` | Find specific port | `ss -a \| grep 5000` |
+| `curl <url>` | Make HTTP request from terminal | `curl http://127.0.0.1:5000` |
+| `curl -I <url>` | Show response headers only | `curl -I http://myapp.local` |
+| `ping <host>` | Test connectivity to host | `ping 8.8.8.8` |
+| `ping <domain>` | Test DNS resolution + connectivity | `ping google.com` |
+
+### Hosts File
+
+**Purpose:** Override DNS locally — maps hostnames to IPs without touching DNS.
+
+| Location | System |
+|----------|--------|
+| `/etc/hosts` | WSL2 / Linux |
+| `C:\Windows\System32\drivers\etc\hosts` | Windows (open editor as Administrator) |
+
+**Example entry:**
+```
+127.0.0.1   myapp.local
+```
+
+**WSL2 note:** Both hosts files must be updated — Windows browser uses Windows hosts file, WSL2 terminal uses Linux hosts file.
+
+### Nginx Management
+
+| Command | Purpose | Example |
+|---------|---------|---------|
+| `sudo nginx -t` | Test config syntax before applying | `sudo nginx -t` |
+| `sudo systemctl reload nginx` | Apply config changes (no downtime) | `sudo systemctl reload nginx` |
+| `sudo systemctl restart nginx` | Full restart | `sudo systemctl restart nginx` |
+| `sudo systemctl status nginx` | Check nginx status | `sudo systemctl status nginx` |
+| `sudo tail -f /var/log/nginx/error.log` | Follow error log | |
+| `sudo tail -f /var/log/nginx/access.log` | Follow access log | |
+
+**Nginx config locations:**
+- Main config: `/etc/nginx/nginx.conf`
+- Site configs: `/etc/nginx/sites-available/<name>`
+- Enabled sites: `/etc/nginx/sites-enabled/<name>` (symlinks to sites-available)
+
+**Enable a site:**
+```bash
+sudo ln -s /etc/nginx/sites-available/myapp /etc/nginx/sites-enabled/myapp
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### Nginx Server Block Structure
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;             # IPv6
+    server_name myapp.local;    # Hostname to match
+
+    location / {
+        proxy_set_header Host $host;                              # Preserve original hostname
+        proxy_set_header X-Real-IP $remote_addr;                  # Real client IP for logging
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  # IP chain through proxies
+        proxy_pass http://127.0.0.1:5000;                         # Forward to app server
+    }
+}
+```
+
+### Firewall (ufw)
+
+| Command | Purpose |
+|---------|---------|
+| `sudo ufw status` | Check firewall status |
+| `sudo ufw allow 80` | Allow HTTP traffic |
+| `sudo ufw allow 443` | Allow HTTPS traffic |
+| `sudo ufw allow 22` | Allow SSH access |
+| `sudo ufw enable` | Enable firewall |
+
+**Production minimum:** Open ports 22, 80, 443 only. Everything else blocked.
+
+**WSL2 note:** `ufw` is inactive in WSL2 — firewall is handled by Windows on the host side.
+
+---
+
+## Key Concepts Learned
+
+### Principle of Least Privilege
+- Run services as dedicated system users, not root
+- Give only the minimum permissions needed
+- Limit blast radius if service is compromised
+
+### Permission Hierarchy
+Linux checks permissions in order:
+1. Are you the owner? → Use owner permissions
+2. Are you in the group? → Use group permissions
+3. Neither? → Use others permissions
+
+### Process Lifecycle
+- Foreground processes block terminal
+- Background processes (`&`) run concurrently but die with terminal
+- `nohup` makes processes survive terminal closure
+- systemd services are the proper way to run persistent services
+
+### Reverse Proxy Pattern
+```
+Browser → Nginx (port 80) → App Server (port 5000, internal only)
+```
+- App server is never exposed directly to the internet
+- Nginx handles SSL termination, static files, load balancing
+- Same pattern appears in Docker, Kubernetes, AWS load balancers
+
+---
+
+## Week 1 Project: Flask Web Application
+
+**Deployed:** Python Flask web server
+**User:** `webapp` (system user, no login)
+**Location:** `/opt/webapp/`
+**Service:** `webapp.service` (systemd)
+**Access:** `http://localhost:5000`
+
+**Commands to manage:**
+```bash
+sudo systemctl status webapp
+sudo systemctl restart webapp
+sudo journalctl -u webapp -f
+curl http://localhost:5000
+```
+
+---
+
+## Week 2 Project: Nginx Reverse Proxy Deployment
+
+**Stack:** Flask (port 5000) behind Nginx (port 80)
+**User:** `webapp` (system user, no login)
+**App location:** `/opt/webapp/`
+**Nginx config:** `/etc/nginx/sites-available/myapp`
+**Access:** `http://myapp.local` (no port needed)
+
+**Commands to manage:**
+```bash
+sudo systemctl status webapp
+sudo systemctl status nginx
+sudo systemctl restart webapp        # After app.py changes
+sudo systemctl reload nginx          # After nginx config changes
+sudo journalctl -u webapp -f         # Flask logs
+sudo tail -f /var/log/nginx/error.log  # Nginx logs
+curl http://myapp.local              # Verify full stack
+```
+
+---
+
 *This cheatsheet will be updated weekly as new skills are learned.*
