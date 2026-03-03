@@ -1,6 +1,6 @@
 # DevOps Learning Journey
 
-This repositoru tracks my 26-week transition from Engineering Support to remote DevOps role.
+This repository tracks my 26-week transition from Engineering Support to remote DevOps role.
 
 ## Background
 - **Current**: Engineering support, SQL/PostgreSQL, infrastructure troubleshooting
